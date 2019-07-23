@@ -1,0 +1,194 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "factoryName": {
+            "type": "string",
+            "metadata": "Data Factory Name",
+            "defaultValue": "adf-poc-export-ss-test1"
+        },
+        "ss_azBlobStorageLinkService_connectionString": {
+            "type": "secureString",
+            "metadata": "Secure string for 'connectionString' of 'ss_azBlobStorageLinkService'",
+			"defaultValue": "DefaultEndpointsProtocol=https;AccountName=ssstorageblob;EndpointSuffix=core.windows.net;"
+        },
+        "AzureSqlDatabase1_connectionString": {
+            "type": "secureString",
+            "metadata": "Secure string for 'connectionString' of 'AzureSqlDatabase1'",
+			"defaultValue": "jdbc:sqlserver://ss-poc-dev.database.windows.net:1433;database=ss-poc-SQLDB;user=dbadmin@ss-poc-dev;encrypt=true;trustservercertificate=false;hostnameincertificate=*.database.windows.net;logintimeout=30"
+        }
+    },
+    "variables": {
+        "factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+    },
+    "resources": [
+        {
+            "name": "[concat(parameters('factoryName'), '/ss_azBlobStorageLinkService')]",
+            "type": "Microsoft.DataFactory/factories/linkedServices",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "type": "AzureBlobStorage",
+                "typeProperties": {
+                    "connectionString": "[parameters('ss_azBlobStorageLinkService_connectionString')]"
+                }
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/AzureSqlDatabase1')]",
+            "type": "Microsoft.DataFactory/factories/linkedServices",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "annotations": [],
+                "type": "AzureSqlDatabase",
+                "typeProperties": {
+                    "connectionString": "[parameters('AzureSqlDatabase1_connectionString')]"
+                }
+            },
+            "dependsOn": []
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/ss_azSQLDBLinkService')]",
+            "type": "Microsoft.DataFactory/factories/datasets",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "linkedServiceName": {
+                    "referenceName": "AzureSqlDatabase1",
+                    "type": "LinkedServiceReference"
+                },
+                "annotations": [],
+                "type": "AzureSqlTable",
+                "schema": [],
+                "typeProperties": {
+                    "tableName": "[dbo].sample"
+                }
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/linkedServices/AzureSqlDatabase1')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/ss_azBlobStore')]",
+            "type": "Microsoft.DataFactory/factories/datasets",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "linkedServiceName": {
+                    "referenceName": "ss_azBlobStorageLinkService",
+                    "type": "LinkedServiceReference"
+                },
+                "annotations": [],
+                "type": "DelimitedText",
+                "typeProperties": {
+                    "location": {
+                        "type": "AzureBlobStorageLocation",
+                        "fileName": "MovieActors.csv",
+                        "container": "samplestore"
+                    },
+                    "columnDelimiter": ",",
+                    "escapeChar": "\\",
+                    "quoteChar": "\""
+                },
+                "schema": []
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/linkedServices/ss_azBlobStorageLinkService')]"
+            ]
+        },
+        {
+            "name": "[concat(parameters('factoryName'), '/pipeline_ss_testfactory')]",
+            "type": "Microsoft.DataFactory/factories/pipelines",
+            "apiVersion": "2018-06-01",
+            "properties": {
+                "activities": [
+                    {
+                        "name": "copyFromBlob",
+                        "type": "Copy",
+                        "dependsOn": [],
+                        "policy": {
+                            "timeout": "7.00:00:00",
+                            "retry": 0,
+                            "retryIntervalInSeconds": 30,
+                            "secureOutput": false,
+                            "secureInput": false
+                        },
+                        "userProperties": [
+                            {
+                                "name": "Source",
+                                "value": "samplestore//MovieActors.csv"
+                            }
+                        ],
+                        "typeProperties": {
+                            "source": {
+                                "type": "DelimitedTextSource",
+                                "storeSettings": {
+                                    "type": "AzureBlobStorageReadSetting",
+                                    "recursive": true,
+                                    "wildcardFileName": "*.*"
+                                },
+                                "formatSettings": {
+                                    "type": "DelimitedTextReadSetting"
+                                }
+                            },
+                            "sink": {
+                                "type": "AzureSqlSink"
+                            },
+                            "enableStaging": false,
+                            "translator": {
+                                "type": "TabularTranslator",
+                                "mappings": [
+                                    {
+                                        "source": {
+                                            "type": "Int32",
+                                            "ordinal": 1
+                                        },
+                                        "sink": {
+                                            "name": "SNo1"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "Int32",
+                                            "ordinal": 2
+                                        },
+                                        "sink": {
+                                            "name": "Actors"
+                                        }
+                                    },
+                                    {
+                                        "source": {
+                                            "type": "Int32",
+                                            "ordinal": 3
+                                        },
+                                        "sink": {
+                                            "name": "imdbID1"
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "inputs": [
+                            {
+                                "referenceName": "ss_azBlobStore",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            }
+                        ],
+                        "outputs": [
+                            {
+                                "referenceName": "ss_azSQLDBLinkService",
+                                "type": "DatasetReference",
+                                "parameters": {}
+                            }
+                        ]
+                    }
+                ],
+                "annotations": []
+            },
+            "dependsOn": [
+                "[concat(variables('factoryId'), '/datasets/ss_azBlobStore')]",
+                "[concat(variables('factoryId'), '/datasets/ss_azSQLDBLinkService')]"
+            ]
+        }
+    ]
+}
